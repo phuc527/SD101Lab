@@ -1,72 +1,33 @@
-// Template Method: fixed processing skeleton, subclasses customize steps.
-import { type Order, subtotal } from "../domain/order.ts";
-import type { PaymentStrategy } from "./strategy.ts";
-
-export interface ProcessResult {
-  orderId: string;
-  success: boolean;
-  amount: number;
-  steps: string[];
-  error?: string;
-}
-
 export abstract class OrderProcessor {
-  // The template. Subclasses override steps, never this method.
-  process(order: Order, payment: PaymentStrategy): ProcessResult {
-    const steps: string[] = [];
-    try {
-      this.validate(order);
-      steps.push("validated");
+  async process(orderId: string): Promise<void> {
+    this.validate(orderId);
 
-      const amount = this.calculateTotal(order);
-      steps.push(`total=${amount}`);
+    await this.execute(orderId);
 
-      const result = payment.pay(amount);
-      if (!result.success) throw new Error(result.message);
-      steps.push(`paid via ${payment.name}`);
+    this.log(orderId);
+  }
 
-      this.afterPayment(order, steps); // hook
-      return { orderId: order.id, success: true, amount, steps };
-    } catch (e) {
-      return {
-        orderId: order.id,
-        success: false,
-        amount: 0,
-        steps,
-        error: (e as Error).message,
-      };
+  private validate(orderId: string): void {
+    if (!orderId.trim()) {
+      throw new Error("Order ID is required");
     }
   }
 
-  protected validate(order: Order): void {
-    if (order.items.length === 0) throw new Error("Order has no items");
-    if (order.items.some((i) => i.quantity <= 0 || i.price < 0))
-      throw new Error("Invalid item");
+  protected abstract execute(orderId: string): Promise<void>;
+
+  private log(orderId: string): void {
+    console.log(`Processed order: ${orderId}`);
   }
-
-  protected abstract shippingFee(order: Order): number;
-
-  protected calculateTotal(order: Order): number {
-    return (
-      Math.max(0, subtotal(order) - order.discount) + this.shippingFee(order)
-    );
-  }
-
-  // Hook: optional, default does nothing.
-  protected afterPayment(_order: Order, _steps: string[]): void {}
 }
 
 export class StandardOrderProcessor extends OrderProcessor {
-  protected shippingFee(order: Order): number {
-    return subtotal(order) >= 100 ? 0 : 5; // free shipping over 100
+  protected async execute(orderId: string): Promise<void> {
+    console.log(`Processing standard order ${orderId}`);
   }
 }
 
-export class ExpressOrderProcessor extends OrderProcessor {
-  protected shippingFee(): number {
-    return 20;
-  }
-  protected afterPayment(_order: Order, steps: string[]): void {
-    steps.push("priority dispatch scheduled");
+export class DigitalOrderProcessor extends OrderProcessor {
+  protected async execute(orderId: string): Promise<void> {
+    console.log(`Delivering digital order ${orderId}`);
   }
 }

@@ -1,180 +1,137 @@
 # Day 1 — Behavioral Design Patterns với TypeScript
 
-Mini project: **E-commerce Order Processing System** dùng 5 behavioral pattern: Strategy, Template Method, Observer, State, Command.
+Mini project **E-commerce Order Processing System** dùng 5 pattern: Strategy, Template Method, Observer, State, Command.
 
-## 0. Chuẩn bị
+## Step 0 — Setup
 
-Yêu cầu Node >= 22.6 (khuyến nghị Node 24). Node chạy thẳng file `.ts` bằng type stripping, không cần build.
+Yêu cầu: Node.js 20+ và npm. Không cần database hay Docker.
 
 ```bash
-npm install        # chỉ cài typescript + @types/node để typecheck
-npm start          # chạy demo src/main.ts
-npm test           # chạy unit test (node:test)
-npm run typecheck  # tsc --noEmit
+npm install
+npm start          # tsx src/main.ts — chạy demo
+npm run dev        # chạy lại khi sửa code
+npm test           # vitest run — 9 test
+npm run test:watch
+npm run typecheck  # tsc
 ```
-
-Vì Node chỉ "xóa type" chứ không compile, code tránh các cú pháp không xóa được: không dùng `enum` (dùng union type) và không dùng parameter properties (`constructor(private x)`), mà gán field trong constructor.
-
-## Cấu trúc
 
 ```
 src/
-  domain/order.ts             # Model Order + hàm tính tiền
-  patterns/strategy.ts        # Step 2: thanh toán
-  patterns/template-method.ts # Step 3: quy trình xử lý đơn
-  patterns/observer.ts        # Step 4: domain events
-  patterns/state.ts           # Step 5: vòng đời đơn hàng
-  patterns/command.ts         # Step 6: thao tác giỏ hàng + undo/redo
-  main.ts                     # Step 7: ghép tất cả lại
-tests/patterns.test.ts        # Step 8: mỗi pattern 1 test
+  domain/order.ts             # Step 6: OrderService ghép các pattern
+  patterns/strategy.ts        # Step 1
+  patterns/template-method.ts # Step 2
+  patterns/observer.ts        # Step 3
+  patterns/state.ts           # Step 4
+  patterns/command.ts         # Step 5
+  main.ts                     # Step 7: demo
+tests/patterns.test.ts        # Step 8
 ```
 
-Nên đọc theo đúng thứ tự step bên dưới.
+## Step 1 — Strategy (`strategy.ts`)
 
-## Step 1 — Domain: `src/domain/order.ts`
-
-Nền tảng cho mọi pattern, chỉ là data + hàm thuần:
-
-- `OrderItem { sku, price, quantity }`
-- `Order { id, customerEmail, items, discount }`
-- `subtotal(order)` = tổng `price * quantity`
-- `total(order)` = `max(0, subtotal - discount)` (không bao giờ âm)
-- `createOrder(id, email, items = [])`
-
-## Step 2 — Strategy: `src/patterns/strategy.ts`
-
-**Vấn đề:** có nhiều cách thanh toán. Nếu viết `if (method === "card") ... else if ...` trong checkout thì mỗi lần thêm phương thức mới phải sửa checkout.
-
-**Giải pháp:** mỗi thuật toán là một class implement chung interface `PaymentStrategy { name, pay(amount) }`.
-
-| Strategy                | Quy tắc                                      |
-| ----------------------- | -------------------------------------------- |
-| `CreditCardPayment`     | Số thẻ phải đủ 16 chữ số, phí 2.9%           |
-| `PayPalPayment`         | Phí 3.4% + 0.3                               |
-| `CashOnDeliveryPayment` | Không phí, từ chối nếu số tiền > 500 (LIMIT) |
-
-`PaymentService` là **context**: chỉ giữ một strategy và gọi `strategy.pay()`. Nó không biết strategy cụ thể là gì, và đổi được lúc runtime bằng `setStrategy()`.
-
-```ts
-const service = new PaymentService(new PayPalPayment("a@b.com"));
-service.setStrategy(new CashOnDeliveryPayment());
-service.checkout(130); // { success: true, message: "Pay on delivery" }
-```
-
-**Ghi nhớ:** thêm phương thức mới = thêm 1 class, không sửa code cũ (Open/Closed).
-
-## Step 3 — Template Method: `src/patterns/template-method.ts`
-
-**Vấn đề:** mọi loại đơn đều xử lý theo cùng thứ tự, chỉ khác vài chi tiết. Copy-paste quy trình cho từng loại thì dễ lệch nhau.
-
-**Giải pháp:** class abstract `OrderProcessor` có method `process()` cố định khung xử lý:
-
-1. `validate(order)`: đơn phải có item, quantity > 0, price >= 0
-2. `calculateTotal(order)`: `total - discount + shippingFee(order)`
-3. `payment.pay(amount)`: dùng lại Strategy ở Step 2
-4. `afterPayment(order, steps)`: **hook**, mặc định không làm gì
-
-Subclass chỉ override phần khác nhau:
-
-- `StandardOrderProcessor`: ship 5, miễn phí khi subtotal >= 100
-- `ExpressOrderProcessor`: ship 20, hook thêm bước `"priority dispatch scheduled"`
-
-Lỗi ở bất kỳ bước nào sẽ bị bắt lại, `process()` trả về `{ success: false, error, steps }`, trong đó `steps` cho biết đã chạy tới đâu.
-
-**Ghi nhớ:** lớp cha giữ thứ tự (abstract method = bắt buộc override, hook = tùy chọn). Đây là "Don't call us, we'll call you".
-
-## Step 4 — Observer: `src/patterns/observer.ts`
-
-**Vấn đề:** khi đơn được thanh toán thì cần gửi email, cập nhật kho, ghi analytics... Nếu `pay()` gọi trực tiếp từng service thì code bị dính chặt vào nhau.
-
-**Giải pháp:** `EventBus<E>` generic, được type theo map `OrderEvents`:
-
-```ts
-type OrderEvents = {
-  "order.created": { orderId; email };
-  "order.paid": { orderId; amount };
-  "order.shipped": { orderId; trackingCode };
-  "order.cancelled": { orderId; reason };
-};
-```
-
-- `subscribe(event, listener)` trả về hàm **unsubscribe**
-- `publish(event, payload)` gọi mọi listener. Một listener throw thì các listener khác vẫn chạy, và lỗi được gom vào mảng `Error[]` để trả về.
-- TypeScript kiểm tra payload theo tên event, nên gửi sai field sẽ báo lỗi lúc compile.
-
-Ví dụ subscriber: `emailNotifier` (nghe `order.paid`) và `inventoryReleaser` (nghe `order.cancelled`).
-
-**Ghi nhớ:** publisher không biết ai đang nghe. Thêm subscriber mới không phải sửa publisher.
-
-## Step 5 — State: `src/patterns/state.ts`
-
-**Vấn đề:** hành vi phụ thuộc trạng thái (đơn đã ship thì không được cancel...). Dùng `switch(status)` rải khắp nơi thì rất khó bảo trì.
-
-```
-Pending -> Paid -> Shipped -> Delivered
-Pending | Paid -> Cancelled
-```
+**Vấn đề:** `if (method === "card") ... else if (method === "paypal")`. Mỗi lần thêm provider (MoMo, Stripe...) lại phải sửa hàm này.
 
 **Giải pháp:**
 
-- `BaseState` mặc định **từ chối mọi hành động** bằng cách throw `InvalidTransitionError("Cannot ship an order that is pending")`.
-- Mỗi state chỉ override hành động mà nó cho phép, ví dụ `PendingState` override `pay` và `cancel`. `DeliveredState` và `CancelledState` không override gì cả (trạng thái cuối).
-- `OrderLifecycle` là context: `pay()/ship()/deliver()/cancel()` chuyển việc cho state hiện tại. Nó ghi lại `history` và gọi callback `onChange(from, to)`. Callback này dùng để nối sang Observer.
+- `PaymentStrategy` là abstraction: `pay(amount): Promise<string>` trả về mã giao dịch.
+- `CardPayment` và `PayPalPayment` là các strategy cụ thể. Cả hai từ chối `amount <= 0` và trả về `CARD-...` / `PAYPAL-...`.
+- `PaymentService` nhận strategy qua constructor (dependency injection) và chỉ gọi `strategy.pay()`. Nó không biết provider nào đang chạy.
 
-**Ghi nhớ:** mỗi trạng thái là một class, nên luật chuyển trạng thái nằm ngay trong state đó thay vì rải trong các `if`.
+**Ghi nhớ:** thêm provider = thêm 1 class, không sửa `PaymentService`. Khi test có thể inject một strategy giả.
 
-## Step 6 — Command: `src/patterns/command.ts`
+## Step 2 — Template Method (`template-method.ts`)
 
-**Vấn đề:** cần undo/redo các thao tác trên giỏ hàng và có log lại những gì đã làm.
+**Vấn đề:** mọi loại đơn đều theo cùng trình tự `validate → execute → log`, chỉ khác bước execute.
 
-**Giải pháp:** mỗi thao tác là một object `Command { description, execute(), undo() }`:
+**Giải pháp:** `OrderProcessor.process()` cố định thứ tự đó.
 
-- `AddItemCommand`: thêm item. Undo thì gỡ item ra.
-- `RemoveItemCommand`: throw nếu SKU không tồn tại. Undo thì trả item về **đúng vị trí cũ**.
-- `ApplyDiscountCommand`: lưu discount cũ để undo khôi phục lại.
+- `validate` và `log` là `private`: lớp con không đổi được.
+- `execute` là `protected abstract`: lớp con bắt buộc phải cài đặt.
+- `StandardOrderProcessor` và `DigitalOrderProcessor` chỉ viết phần `execute`.
 
-`CommandHistory` là invoker:
+**Trade-off:** pattern này dựa vào kế thừa. Nếu các biến thể khác nhau quá nhiều thì nên dùng composition + Strategy.
 
-- `run(cmd)`: chỉ ghi lịch sử khi `execute()` thành công. Chạy thành công thì **xóa redo stack**.
-- `undo()` / `redo()`: trả `false` nếu không còn gì để undo/redo.
-- `log`: danh sách mô tả các lệnh đã chạy.
+## Step 3 — Observer (`observer.ts`)
 
-**Ghi nhớ:** biến hành động thành object, nhờ đó lưu, hoàn tác, làm lại và log được.
+**Vấn đề:** sau khi đơn được thanh toán cần gửi email, ghi audit, push notification. Nếu `OrderService` gọi trực tiếp cả ba thì nó phụ thuộc vào tất cả.
 
-## Step 7 — Ghép lại: `src/main.ts`
+**Giải pháp:** `OrderEventEmitter`.
 
-Demo một luồng đầy đủ:
+- `subscribe(handler)` trả về hàm `unsubscribe`.
+- `publish(event)` chạy mọi handler **đồng thời** bằng `Promise.allSettled`, nên một handler lỗi không chặn các handler khác. Sau khi tất cả chạy xong, nếu có handler lỗi thì throw `"N order event handler(s) failed"`.
+- `Promise.resolve().then(() => handler(event))` biến cả lỗi throw đồng bộ thành promise bị reject.
+- `registerOrderObservers` đăng ký 3 subscriber: email, audit, push.
 
-1. **Command** dựng giỏ hàng: thêm item, áp discount, thử undo/redo. Kết quả total = 130.
-2. **Strategy** đổi qua lại giữa các phương thức thanh toán, thử COD.
-3. **Template Method** xử lý đơn qua `StandardOrderProcessor` bằng thẻ.
-4. **State + Observer**: `OrderLifecycle` có `onChange` publish event lên `EventBus`. Chạy pending → paid → shipped, sau đó thử `cancel()` thì bị chặn vì đã ship.
-5. In ra các notification mà subscriber nhận được.
+**Production:** emitter này chạy trong cùng process, event mất khi app crash. Hệ thống thật cần message broker (RabbitMQ/Kafka), retry + dead-letter queue, idempotent consumer và Transactional Outbox.
 
-```bash
-npm start
+## Step 4 — State (`state.ts`)
+
+```
+PENDING -> PAID -> SHIPPED -> COMPLETED
+PENDING | PAID -> CANCELLED
 ```
 
-## Step 8 — Test: `tests/patterns.test.ts`
+**Vấn đề:** if/else kiểm tra trạng thái rải khắp nơi, quy tắc chuyển trạng thái bị phân tán.
 
-Dùng `node:test` + `node:assert/strict` có sẵn trong Node, không cần Jest. Mỗi pattern có 1 test kiểm tra hành vi chính:
+**Giải pháp:** bảng `transitions: Record<OrderStatus, OrderStatus[]>` gom mọi quy tắc vào một chỗ. `OrderStateMachine.transitionTo(next)` throw `Invalid transition: A -> B` nếu bước đó không có trong bảng.
 
-- Strategy: phí đúng, thẻ sai bị từ chối, COD vượt limit
-- Template Method: free ship >= 100, hook Express, đơn rỗng thì fail
-- Observer: nhận event, unsubscribe, listener lỗi không ảnh hưởng listener khác
-- State: chuyển đúng thứ tự, transition sai thì throw, history đúng
-- Command: undo/redo, lệnh lỗi không vào log, chạy lệnh mới thì xóa redo
+| Strategy                      | State                                |
+| ----------------------------- | ------------------------------------ |
+| Chọn thuật toán               | Hành vi thay đổi theo trạng thái     |
+| Thường được chọn từ bên ngoài | Thay đổi theo vòng đời của đối tượng |
+| Card / PayPal                 | Pending / Shipped                    |
 
-```bash
-npm test
+**Production:** nhiều server cùng cập nhật một order thì kiểm tra trong bộ nhớ là không đủ. Cần transaction, optimistic locking hoặc conditional update ở database.
+
+## Step 5 — Command (`command.ts`)
+
+**Vấn đề:** cần lịch sử thao tác, queue, retry hoặc undo, nên không thể gọi thẳng các hàm nghiệp vụ.
+
+**Giải pháp:**
+
+- `Command { execute() }`: mỗi thao tác là một object.
+- `CommandInvoker.execute(cmd)`: chạy lệnh, chỉ lưu vào lịch sử khi chạy thành công. `getHistory()` trả về bản sao.
+- `ChangeStatusCommand` nhận getter/setter và status mới. `execute` lưu status cũ, sau đó `undo()` khôi phục lại. Gọi `undo` khi chưa execute sẽ throw.
+
+**Lưu ý:** `undo()` chưa thuộc interface `Command`. Muốn invoker undo được mọi lệnh thì thêm `UndoableCommand` (bài tập). Không dùng cách này để hoàn tiền thật.
+
+## Step 6 — Ghép lại (`domain/order.ts`)
+
+`OrderService` lưu các order trong một `Map<orderId, { total, state }>`:
+
+- `create(id, total)`: validate id không rỗng, chưa tồn tại, total > 0. Tạo order với state machine `PENDING`.
+- `pay(id)`: chỉ khi đơn đang `PENDING`. **Strategy** thu tiền, **State** chuyển sang `PAID`, **Observer** publish event, sau đó trả về mã giao dịch.
+- `transition(id, next)` / `getStatus(id)`: thao tác với state machine.
+
+**Giới hạn:** nếu đã thu tiền nhưng bước chuyển trạng thái hoặc publish event bị lỗi thì dữ liệu sẽ không nhất quán. Production cần idempotency key, reconciliation và outbox.
+
+## Step 7 — Demo (`main.ts`)
+
+```
+Before payment: PENDING
+Paying 250 via Card
+Email sent for ORD-001
+Audit logged for ORD-001
+Push notification for ORD-001
+Payment reference: CARD-...
+After payment: PAID
+After shipping: SHIPPED
 ```
 
-## Tóm tắt nhanh
+## Step 8 — Test (`tests/patterns.test.ts`)
 
-| Pattern         | Câu hỏi nó trả lời                      | Trong project          |
-| --------------- | --------------------------------------- | ---------------------- |
-| Strategy        | Làm _cách nào_? (thuật toán đổi được)   | Phương thức thanh toán |
-| Template Method | Làm _theo thứ tự nào_? (khung cố định)  | Quy trình xử lý đơn    |
-| Observer        | _Ai cần biết_ khi có chuyện xảy ra?     | Domain events          |
-| State           | Được làm gì _ở trạng thái này_?         | Vòng đời đơn hàng      |
-| Command         | Làm sao _lưu / hoàn tác_ một hành động? | Undo/redo giỏ hàng     |
+9 test chạy bằng vitest:
+
+- Strategy (2): trả về đúng prefix mã giao dịch; từ chối amount = 0
+- Template Method (2): chạy đúng trình tự (spy `console.log`); từ chối order ID rỗng
+- Observer (2): handler nhận đúng event; handler đã unsubscribe thì không được gọi
+- State (2): transition hợp lệ; `PENDING -> SHIPPED` bị chặn
+- Command (1): execute, kiểm tra history, rồi undo
+
+## Bài tập nâng cao
+
+- [ ] Strategy: thêm `MoMoPayment` + test, không sửa `PaymentService`
+- [ ] Template Method: thêm `CsvOrderProcessor`
+- [ ] Observer: subscriber lỗi, kiểm tra các subscriber khác vẫn chạy
+- [ ] State: không cho hủy sau khi đã giao
+- [ ] Command: interface `UndoableCommand`
