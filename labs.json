@@ -1,0 +1,10 @@
+{
+  "newsfeed": { "fresher": 4101, "junior": 4102, "middle": 4103, "senior": 4104 },
+  "url-shortener": { "fresher": 4201, "junior": 4202, "middle": 4203, "senior": 4204 },
+  "rate-limiter": { "fresher": 4301, "junior": 4302, "middle": 4303, "senior": 4304 },
+  "chat-app": { "fresher": 4401, "junior": 4402, "middle": 4403, "senior": 4404 },
+  "ride-sharing": { "fresher": 4501, "junior": 4502, "middle": 4503, "senior": 4504 },
+  "autocomplete": { "fresher": 4601, "junior": 4602, "middle": 4603, "senior": 4604 },
+  "notification": { "fresher": 4701, "junior": 4702, "middle": 4703, "senior": 4704 },
+  "flash-sale": { "fresher": 4801, "junior": 4802, "middle": 4803, "senior": 4804 }
+}

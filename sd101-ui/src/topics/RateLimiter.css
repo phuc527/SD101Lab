@@ -1,0 +1,20 @@
+.rl-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.rl-cell {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  font: 11px/1 var(--mono);
+  color: var(--surface);
+}
+.rl-ok { background: var(--ok); }
+.rl-bad { background: var(--bad); }
+.rl-err { background: var(--muted); }

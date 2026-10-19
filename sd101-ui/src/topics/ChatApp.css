@@ -1,0 +1,11 @@
+.chat-convs { border: 0; padding: 0; margin: 0; gap: 16px; }
+.chat-convs legend { padding: 0; margin-bottom: 6px; font-size: 0.88rem; }
+.chat-panes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; align-items: start; }
+.chat-pane[hidden] { display: none; }
+.chat-log { min-height: 120px; max-height: 280px; overflow-y: auto; align-content: start; }
+.chat-msg { margin-right: 24px; }
+.chat-mine { margin: 0 0 0 24px; background: var(--surface-2); }
+.chat-msg p { margin: 0; overflow-wrap: anywhere; }
+.chat-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--border); vertical-align: middle; }
+.chat-dot-on { background: var(--ok); }
+.chat-badge-off { color: var(--muted); background: var(--surface-2); }

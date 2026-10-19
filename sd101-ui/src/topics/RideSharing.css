@@ -1,0 +1,13 @@
+.rs-map { width: 100%; max-width: 560px; height: auto; aspect-ratio: 1; display: block; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); cursor: crosshair; touch-action: manipulation; }
+.rs-available { fill: var(--ok); }
+.rs-on_trip { fill: var(--write); }
+.rs-offline { fill: none; stroke: var(--muted); stroke-width: 2; }
+.rs-pickup { fill: var(--bad); stroke: var(--surface); stroke-width: 3; }
+.rs-trip-line { stroke: var(--write); stroke-width: 2; stroke-dasharray: 6 4; }
+.rs-surge { fill: var(--bad); }
+.rs-surge-label { fill: var(--bad); font: 600 22px var(--mono); }
+.rs-shard { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.rs-shard-label { fill: var(--accent); font: 16px var(--mono); }
+.rs-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.85rem; color: var(--muted); }
+.rs-legend svg { vertical-align: middle; margin-right: 4px; }
+.rs-coords { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-width: 560px; }
