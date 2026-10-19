@@ -8,8 +8,9 @@ Yêu cầu: Node.js 20+ và npm. Không cần database hay Docker.
 
 ```bash
 npm install
-npm start          # tsx src/main.ts — chạy demo
-npm run dev        # chạy lại khi sửa code
+npm run dev        # mở UI React (Vite) để bấm thử từng pattern
+npm start          # tsx src/main.ts — chạy demo trên terminal
+npm run dev:cli    # demo terminal, chạy lại khi sửa code
 npm test           # vitest run — 9 test
 npm run test:watch
 npm run typecheck  # tsc
@@ -25,7 +26,10 @@ src/
   patterns/command.ts         # Step 5
   main.ts                     # Step 7: demo
 tests/patterns.test.ts        # Step 8
+ui/                           # UI React gọi trực tiếp code trong src/
 ```
+
+UI (`npm run dev`) có 6 tab ứng với Step 1–6. Mỗi nút gọi class thật trong `src/`, console bên dưới hiện `console.log` và lỗi thật, nên khi sửa code pattern thì UI cập nhật theo.
 
 ## Step 1 — Strategy (`strategy.ts`)
 
